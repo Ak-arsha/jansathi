@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
-import { fetchAllSchemes, fetchSchemeBySlug } from "./lib/db-fallback";
+import { sqliteDb } from "./lib/sqlite-db";
 import { matchSchemes, type CitizenProfile } from "./lib/eligibility";
+import type { Scheme } from "@db/schema";
 
 const profileInput = z.object({
   age: z.number().int().min(0).max(120).nullish(),
@@ -14,6 +15,28 @@ const profileInput = z.object({
   hasDisability: z.boolean().nullish(),
 });
 
+function formatSchemeRow(row: any): Scheme {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    nameHi: row.name_hi,
+    ministry: row.ministry,
+    category: row.category,
+    level: row.level,
+    summary: row.summary,
+    summaryHi: row.summary_hi,
+    benefits: row.benefits,
+    benefitsHi: row.benefits_hi,
+    rules: row.rules,
+    documents: row.documents,
+    steps: row.steps,
+    officialUrl: row.official_url,
+    tags: row.tags,
+    createdAt: new Date(row.created_at),
+  };
+}
+
 export const schemesRouter = createRouter({
   list: publicQuery
     .input(
@@ -25,14 +48,16 @@ export const schemesRouter = createRouter({
         .optional(),
     )
     .query(async ({ input }) => {
-      const all = await fetchAllSchemes();
-      let rows = all;
+      const rows = sqliteDb.prepare("SELECT * FROM schemes ORDER BY id ASC").all() as any[];
+      let results = rows.map(formatSchemeRow);
+
       if (input?.category && input.category !== "all") {
-        rows = rows.filter((s) => s.category === input.category);
+        results = results.filter((s) => s.category === input.category);
       }
+
       if (input?.search) {
         const q = input.search.toLowerCase();
-        rows = rows.filter((s) => {
+        results = results.filter((s) => {
           try {
             const tags: string[] = typeof s.tags === "string" ? JSON.parse(s.tags) : s.tags;
             return (
@@ -50,34 +75,36 @@ export const schemesRouter = createRouter({
           }
         });
       }
-      return rows;
+
+      return results;
     }),
 
   categories: publicQuery.query(async () => {
-    const all = await fetchAllSchemes();
-    return [...new Set(all.map((r) => r.category))].sort();
+    const rows = sqliteDb.prepare("SELECT DISTINCT category FROM schemes ORDER BY category ASC").all() as { category: string }[];
+    return rows.map((r) => r.category);
   }),
 
   bySlug: publicQuery
     .input(z.object({ slug: z.string() }))
     .query(async ({ input }) => {
-      const row = await fetchSchemeBySlug(input.slug);
+      const row = sqliteDb.prepare("SELECT * FROM schemes WHERE slug = ?").get(input.slug) as any;
       if (!row) throw new Error("Scheme not found");
-      return row;
+      return formatSchemeRow(row);
     }),
 
   match: publicQuery
     .input(z.object({ profile: profileInput }))
     .query(async ({ input }) => {
-      const all = await fetchAllSchemes();
-      return matchSchemes(all, input.profile as CitizenProfile);
+      const rows = sqliteDb.prepare("SELECT * FROM schemes").all() as any[];
+      const schemesList = rows.map(formatSchemeRow);
+      return matchSchemes(schemesList, input.profile as CitizenProfile);
     }),
 
   stats: publicQuery.query(async () => {
-    const all = await fetchAllSchemes();
+    const rows = sqliteDb.prepare("SELECT category FROM schemes").all() as { category: string }[];
     return {
-      totalSchemes: all.length,
-      categories: new Set(all.map((s) => s.category)).size,
+      totalSchemes: rows.length,
+      categories: new Set(rows.map((s) => s.category)).size,
     };
   }),
 });

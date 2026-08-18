@@ -5,26 +5,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/providers/trpc";
 import { useNavigate, Link } from "react-router";
-import { Landmark, LogIn, Lock, User } from "lucide-react";
+import { Landmark, UserPlus, Lock, Mail, User, ShieldCheck } from "lucide-react";
 
-export default function Login() {
+export default function Register() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
   const [formData, setFormData] = useState({
-    emailOrUsername: "",
+    name: "",
+    username: "",
+    email: "",
     password: "",
   });
 
   const [errorMsg, setErrorMsg] = useState("");
 
-  const loginMutation = trpc.auth.login.useMutation({
+  const signupMutation = trpc.auth.signup.useMutation({
     onSuccess: async () => {
       await utils.invalidate();
       navigate("/");
     },
     onError: (error) => {
-      setErrorMsg(error.message || "Invalid credentials.");
+      setErrorMsg(error.message || "Registration failed. Please try again.");
     },
   });
 
@@ -38,10 +40,11 @@ export default function Login() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
-    loginMutation.mutate(formData);
+    signupMutation.mutate(formData);
   };
 
   const handleGoogleSignIn = () => {
+    // Simulates Google OAuth login flow
     const sampleEmail = "user" + Math.floor(Math.random() * 1000) + "@gmail.com";
     googleLoginMutation.mutate({
       email: sampleEmail,
@@ -57,8 +60,8 @@ export default function Login() {
           <div className="mx-auto w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white mb-3 shadow-lg shadow-indigo-500/20">
             <Landmark className="w-6 h-6" />
           </div>
-          <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-          <CardDescription>Sign in to your JanSathi account</CardDescription>
+          <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
+          <CardDescription>Register for JanSathi AI Public Services Portal</CardDescription>
         </CardHeader>
         <CardContent>
           {errorMsg && (
@@ -69,15 +72,47 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="emailOrUsername">Email or Username</Label>
+              <Label htmlFor="name">Full Name</Label>
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <Input
-                  id="emailOrUsername"
+                  id="name"
                   type="text"
-                  placeholder="username or email@example.com"
-                  value={formData.emailOrUsername}
-                  onChange={(e) => setFormData({ ...formData, emailOrUsername: e.target.value })}
+                  placeholder="Akarsha Agarwal"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="pl-9"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="username">Username</Label>
+              <div className="relative">
+                <ShieldCheck className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="akarsha25"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  className="pl-9"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email Address</Label>
+              <div className="relative">
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="akarsha@example.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="pl-9"
                   required
                 />
@@ -103,10 +138,10 @@ export default function Login() {
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-medium py-5 shadow-md shadow-indigo-500/20"
-              disabled={loginMutation.isPending}
+              disabled={signupMutation.isPending}
             >
-              <LogIn className="w-4 h-4 mr-2" />
-              {loginMutation.isPending ? "Signing In..." : "Sign In"}
+              <UserPlus className="w-4 h-4 mr-2" />
+              {signupMutation.isPending ? "Creating Account..." : "Sign Up"}
             </Button>
           </form>
 
@@ -148,9 +183,9 @@ export default function Login() {
           </Button>
 
           <p className="text-center text-xs text-slate-500 mt-6">
-            Don't have an account yet?{" "}
-            <Link to="/register" className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
-              Create an account
+            Already have an account?{" "}
+            <Link to="/login" className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
+              Sign In
             </Link>
           </p>
         </CardContent>

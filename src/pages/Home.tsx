@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Bot, FileText, Search, ShieldCheck, UserCheck, ArrowRight, CheckCircle2, Sparkles, Landmark, Building2, HeartPulse, GraduationCap } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Bot, FileText, Search, ArrowRight, Sparkles, Landmark, Building2, HeartPulse, GraduationCap, LogOut, UserCheck } from "lucide-react"
 import { Link } from "react-router"
+import { useAuth } from "@/hooks/useAuth"
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('')
+  const { user, logout } = useAuth()
 
   const services = [
     {
@@ -66,14 +69,32 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center space-x-4">
-            <Link to="/login">
-              <Button variant="outline" className="hidden sm:inline-flex">Sign In</Button>
-            </Link>
-            <Link to="/login">
-              <Button className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-md shadow-indigo-500/20">
-                Get Started <ArrowRight className="w-4 h-4 ml-1.5" />
-              </Button>
-            </Link>
+            {user ? (
+              <div className="flex items-center space-x-3">
+                <Avatar className="w-9 h-9 border border-indigo-200">
+                  <AvatarImage src={user.avatar || ""} />
+                  <AvatarFallback className="bg-indigo-100 text-indigo-700 font-semibold">{user.name?.slice(0, 2).toUpperCase() || "US"}</AvatarFallback>
+                </Avatar>
+                <div className="hidden md:block text-left">
+                  <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{user.name}</div>
+                  <div className="text-[10px] text-slate-500">@{user.unionId}</div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => logout()} className="text-slate-500 hover:text-rose-600">
+                  <LogOut className="w-4 h-4 mr-1" /> Sign Out
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Link to="/login">
+                  <Button variant="outline" size="sm">Sign In</Button>
+                </Link>
+                <Link to="/register">
+                  <Button size="sm" className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white">
+                    Register
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>

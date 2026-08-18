@@ -1,56 +1,70 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
-import { fetchAllSchemes, fetchSchemeBySlug } from "./lib/db-fallback";
-import { getDb } from "./queries/connection";
-import { applications, schemes, type Application, type Scheme } from "@db/schema";
-import { and, eq } from "drizzle-orm";
+import { sqliteDb } from "./lib/sqlite-db";
 
 const STATUS = ["saved", "documents_ready", "submitted", "approved"] as const;
-
-let inMemoryApps: { application: Application; scheme: Scheme }[] = [];
 
 export const applicationsRouter = createRouter({
   list: publicQuery.query(async ({ ctx }) => {
     const userId = ctx.user?.id ?? 1;
-    try {
-      const db = getDb();
-      const rows = await db
-        .select({ application: applications, scheme: schemes })
-        .from(applications)
-        .innerJoin(schemes, eq(applications.schemeId, schemes.id))
-        .where(eq(applications.userId, userId));
-      if (rows && rows.length > 0) return rows;
-    } catch {
-      // fallback
-    }
-    return inMemoryApps;
+    const rows = sqliteDb.prepare(`
+      SELECT 
+        a.id as app_id, a.user_id, a.scheme_id, a.status, a.notes, a.created_at as app_created_at,
+        s.id as s_id, s.slug, s.name, s.name_hi, s.ministry, s.category, s.level, s.summary,
+        s.summary_hi, s.benefits, s.benefits_hi, s.rules, s.documents, s.steps, s.official_url, s.tags,
+        s.created_at as s_created_at
+      FROM applications a
+      JOIN schemes s ON a.scheme_id = s.id
+      WHERE a.user_id = ?
+      ORDER BY a.updated_at DESC
+    `).all(userId) as any[];
+
+    return rows.map((r) => ({
+      application: {
+        id: r.app_id,
+        userId: r.user_id,
+        schemeId: r.scheme_id,
+        status: r.status,
+        notes: r.notes,
+        createdAt: new Date(r.app_created_at),
+        updatedAt: new Date(r.app_created_at),
+      },
+      scheme: {
+        id: r.s_id,
+        slug: r.slug,
+        name: r.name,
+        nameHi: r.name_hi,
+        ministry: r.ministry,
+        category: r.category,
+        level: r.level,
+        summary: r.summary,
+        summaryHi: r.summary_hi,
+        benefits: r.benefits,
+        benefitsHi: r.benefits_hi,
+        rules: r.rules,
+        documents: r.documents,
+        steps: r.steps,
+        officialUrl: r.official_url,
+        tags: r.tags,
+        createdAt: new Date(r.s_created_at),
+      },
+    }));
   }),
 
   track: publicQuery
     .input(z.object({ schemeSlug: z.string(), notes: z.string().max(2000).optional() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user?.id ?? 1;
-      const scheme = await fetchSchemeBySlug(input.schemeSlug);
+      const scheme = sqliteDb.prepare("SELECT id FROM schemes WHERE slug = ?").get(input.schemeSlug) as any;
       if (!scheme) throw new Error("Scheme not found");
-      const newApp: Application = {
-        id: inMemoryApps.length + 1,
-        userId,
-        schemeId: scheme.id,
-        status: "saved",
-        notes: input.notes ?? null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      try {
-        const db = getDb();
-        await db
-          .insert(applications)
-          .values({ userId, schemeId: scheme.id, notes: input.notes })
-          .onDuplicateKeyUpdate({ set: { notes: input.notes ?? null } });
-      } catch {
-        inMemoryApps = inMemoryApps.filter((item) => item.scheme.id !== scheme.id);
-        inMemoryApps.push({ application: newApp, scheme });
-      }
+
+      const stmt = sqliteDb.prepare(`
+        INSERT INTO applications (user_id, scheme_id, notes, status)
+        VALUES (?, ?, ?, 'saved')
+        ON CONFLICT(user_id, scheme_id) DO UPDATE SET notes=excluded.notes, updated_at=CURRENT_TIMESTAMP
+      `);
+      stmt.run(userId, scheme.id, input.notes ?? null);
+
       return { ok: true };
     }),
 
@@ -58,19 +72,11 @@ export const applicationsRouter = createRouter({
     .input(z.object({ id: z.number(), status: z.enum(STATUS) }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user?.id ?? 1;
-      try {
-        const db = getDb();
-        await db
-          .update(applications)
-          .set({ status: input.status })
-          .where(and(eq(applications.id, input.id), eq(applications.userId, userId)));
-      } catch {
-        inMemoryApps = inMemoryApps.map((item) =>
-          item.application.id === input.id
-            ? { ...item, application: { ...item.application, status: input.status } }
-            : item,
-        );
-      }
+      sqliteDb.prepare(`
+        UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND user_id = ?
+      `).run(input.status, input.id, userId);
+
       return { ok: true };
     }),
 
@@ -78,19 +84,11 @@ export const applicationsRouter = createRouter({
     .input(z.object({ id: z.number(), notes: z.string().max(2000) }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user?.id ?? 1;
-      try {
-        const db = getDb();
-        await db
-          .update(applications)
-          .set({ notes: input.notes })
-          .where(and(eq(applications.id, input.id), eq(applications.userId, userId)));
-      } catch {
-        inMemoryApps = inMemoryApps.map((item) =>
-          item.application.id === input.id
-            ? { ...item, application: { ...item.application, notes: input.notes } }
-            : item,
-        );
-      }
+      sqliteDb.prepare(`
+        UPDATE applications SET notes = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND user_id = ?
+      `).run(input.notes, input.id, userId);
+
       return { ok: true };
     }),
 
@@ -98,14 +96,7 @@ export const applicationsRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.user?.id ?? 1;
-      try {
-        const db = getDb();
-        await db
-          .delete(applications)
-          .where(and(eq(applications.id, input.id), eq(applications.userId, userId)));
-      } catch {
-        inMemoryApps = inMemoryApps.filter((item) => item.application.id !== input.id);
-      }
+      sqliteDb.prepare("DELETE FROM applications WHERE id = ? AND user_id = ?").run(input.id, userId);
       return { ok: true };
     }),
 });
