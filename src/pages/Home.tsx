@@ -1,16 +1,16 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { 
-  Bot, FileText, Search, ShieldCheck, UserCheck, ArrowRight, CheckCircle2, Sparkles, 
-  Landmark, Building2, HeartPulse, GraduationCap, LogOut, MessageSquare, ExternalLink, 
-  Filter, Check, Clock, X, ChevronRight, Calculator, Bookmark, CheckCircle, RefreshCw, Send, Globe
+  Bot, FileText, Search, ArrowRight, CheckCircle2, Sparkles, 
+  Landmark, HeartPulse, GraduationCap, LogOut, ExternalLink, 
+  Check, Clock, X, ChevronRight, Calculator, Bookmark, CheckCircle, RefreshCw, Send, Globe,
+  ShieldAlert, CreditCard, UserCheck, Scale, AlertCircle, FileCheck, HelpCircle
 } from "lucide-react"
 import { Link } from "react-router"
 import { useAuth } from "@/hooks/useAuth"
@@ -26,9 +26,21 @@ export default function Home() {
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatLang, setChatLang] = useState<'en' | 'hi'>('en')
   const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string }>>([
-    { sender: 'bot', text: 'Namaste! I am JanSathi AI, your public services assistant. How can I help you with government schemes today?' }
+    { sender: 'bot', text: 'Namaste! I am JanSathi AI, your public services & civic assistant. Ask me about any government scheme, document requirements, or CPGRAMS public grievances!' }
   ])
   const [inputMessage, setInputMessage] = useState('')
+
+  // Grievance Draft Form State
+  const [grievanceForm, setGrievanceForm] = useState({
+    department: 'Food & Civil Supplies',
+    subject: 'Delay in Ration Card Issue',
+    description: 'Applied for BPL Ration Card 45 days ago (Ref #RC-8921). No action taken by Food Supply Inspector.',
+    state: 'Uttar Pradesh'
+  })
+  const [generatedDraft, setGeneratedDraft] = useState<string | null>(null)
+
+  // Document Vault Search State
+  const [docVaultSearch, setDocVaultSearch] = useState('')
 
   // Eligibility Checker Form State
   const [eligibilityForm, setEligibilityForm] = useState({
@@ -85,6 +97,64 @@ export default function Home() {
     }
   })
 
+  // Document Vault Static Knowledge Base
+  const docVaultData = [
+    {
+      id: 'aadhaar',
+      title: 'Aadhaar Card Enrolment / Correction',
+      category: 'Identity',
+      icon: UserCheck,
+      docs: ['Proof of Identity (PAN / Passport / Voter ID)', 'Proof of Address (Electricity bill / Rent agreement)', 'Date of Birth Certificate / 10th Marksheet'],
+      portal: 'https://uidai.gov.in'
+    },
+    {
+      id: 'pan',
+      title: 'PAN Card (Permanent Account Number)',
+      category: 'Financial',
+      icon: CreditCard,
+      docs: ['Aadhaar Card (Instant e-PAN via OTP)', 'Passport Size Photographs', 'Proof of Address'],
+      portal: 'https://onlineservices.tin.nsdl.com'
+    },
+    {
+      id: 'ration',
+      title: 'Ration Card (NFSA / BPL / AAY)',
+      category: 'Welfare',
+      icon: FileText,
+      docs: ['Aadhaar of all family members', 'Income Certificate from Tehsildar', 'Electricity/Rent Bill', 'Family Passport Photo'],
+      portal: 'https://nfsa.gov.in'
+    },
+    {
+      id: 'ayushman',
+      title: 'Ayushman Bharat Health Card (PM-JAY)',
+      category: 'Health',
+      icon: HeartPulse,
+      docs: ['Aadhaar Card', 'Ration Card / SECC 2011 Name inclusion', 'Active Mobile Number'],
+      portal: 'https://pmjay.gov.in'
+    },
+    {
+      id: 'caste_income',
+      title: 'Income & Caste / Domicile Certificate',
+      category: 'Civic',
+      icon: FileCheck,
+      docs: ['Aadhaar Card', 'Ration Card', 'Self-Declaration Affidavit', 'Land / Salary Slips'],
+      portal: 'https://edistrict.up.gov.in'
+    },
+    {
+      id: 'passport',
+      title: 'Indian Passport (Normal / Tatkaal)',
+      category: 'Travel',
+      icon: Landmark,
+      docs: ['Aadhaar Card', 'PAN Card', 'Birth Certificate / 10th Certificate', 'Bank Passbook'],
+      portal: 'https://passportindia.gov.in'
+    }
+  ]
+
+  const filteredDocVault = docVaultData.filter(d => 
+    d.title.toLowerCase().includes(docVaultSearch.toLowerCase()) || 
+    d.category.toLowerCase().includes(docVaultSearch.toLowerCase()) ||
+    d.docs.some(doc => doc.toLowerCase().includes(docVaultSearch.toLowerCase()))
+  )
+
   // Handlers
   const handleSendMessage = (textToSend?: string) => {
     const msg = textToSend || inputMessage
@@ -110,6 +180,30 @@ export default function Home() {
         hasDisability: eligibilityForm.hasDisability
       }
     })
+  }
+
+  const handleGenerateGrievanceDraft = () => {
+    const draft = `To,
+The Nodal Grievance Officer,
+Department of ${grievanceForm.department},
+Government of ${grievanceForm.state}.
+
+Subject: Public Grievance regarding ${grievanceForm.subject}
+
+Respected Sir/Madam,
+
+I am writing to formally lodge a public grievance regarding the delay in service delivery.
+Details of issue:
+${grievanceForm.description}
+
+As per Citizen Charter guidelines, this public service should be rendered within the stipulated timeframe. I request your immediate intervention to resolve this issue and expedite the process.
+
+Yours faithfully,
+[Your Name / Citizen]
+Contact / Aadhaar Ref: [Your Ref Number]
+Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
+
+    setGeneratedDraft(draft)
   }
 
   const isSchemeTracked = (schemeId: number) => {
@@ -144,19 +238,18 @@ export default function Home() {
                   JanSathi
                 </span>
                 <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 text-[10px] font-semibold">
-                  AI 2.0
+                  AI Portal
                 </Badge>
               </div>
             </div>
           </div>
 
           {/* Quick Nav Links */}
-          <nav className="hidden md:flex items-center space-x-6 text-sm font-medium text-slate-600 dark:text-slate-400">
-            <a href="#schemes" className="hover:text-indigo-600 transition">Explore Schemes</a>
-            <a href="#eligibility" className="hover:text-indigo-600 transition">Eligibility Checker</a>
-            <button onClick={() => setIsChatOpen(true)} className="hover:text-indigo-600 transition flex items-center">
-              <Sparkles className="w-3.5 h-3.5 mr-1 text-indigo-500" /> AI Assistant
-            </button>
+          <nav className="hidden lg:flex items-center space-x-6 text-sm font-medium text-slate-600 dark:text-slate-400">
+            <a href="#schemes" className="hover:text-indigo-600 transition">Schemes</a>
+            <a href="#eligibility" className="hover:text-indigo-600 transition">Eligibility</a>
+            <a href="#doc-vault" className="hover:text-indigo-600 transition">Doc Vault</a>
+            <a href="#grievance" className="hover:text-indigo-600 transition">Grievance Helper</a>
             {user && (
               <a href="#my-schemes" className="hover:text-indigo-600 transition flex items-center">
                 <Bookmark className="w-3.5 h-3.5 mr-1 text-amber-500" /> My Schemes ({trackedApps.length})
@@ -174,7 +267,7 @@ export default function Home() {
                     {user.name?.slice(0, 2).toUpperCase() || "US"}
                   </AvatarFallback>
                 </Avatar>
-                <div className="hidden lg:block text-left">
+                <div className="hidden xl:block text-left">
                   <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{user.name}</div>
                   <div className="text-[10px] text-slate-500">@{user.unionId}</div>
                 </div>
@@ -214,7 +307,7 @@ export default function Home() {
           </h1>
 
           <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed font-normal">
-            Find eligible welfare schemes, check document requirements, track application progress, and chat with AI in English & Hindi.
+            Find eligible welfare schemes, check document requirements, draft CPGRAMS public grievances, and chat with AI in English & Hindi.
           </p>
 
           {/* Search Box */}
@@ -223,7 +316,7 @@ export default function Home() {
               <Search className="w-5 h-5 text-indigo-500 ml-3 mr-2" />
               <input
                 type="text"
-                placeholder="Search schemes e.g. PM Kisan, Ayushman Bharat, Scholarship..."
+                placeholder="Search schemes e.g. PM Kisan, Ayushman Bharat, Aadhaar, CPGRAMS..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-transparent border-0 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-0 text-sm sm:text-base placeholder-slate-400"
@@ -241,7 +334,7 @@ export default function Home() {
             {/* Quick Tag Pills */}
             <div className="flex flex-wrap items-center justify-center gap-2 mt-4 text-xs">
               <span className="text-slate-400 font-medium">Popular Searches:</span>
-              {['PM-Kisan', 'Ayushman Bharat', 'Scholarships', 'PMAY Housing', 'KCC Loan'].map((tag) => (
+              {['PM-Kisan', 'Ayushman Bharat', 'Aadhaar', 'Ration Card', 'CPGRAMS'].map((tag) => (
                 <button
                   key={tag}
                   onClick={() => setSearchQuery(tag)}
@@ -264,8 +357,8 @@ export default function Home() {
               <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">AI Eligibility Match</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
-              <div className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">24/7</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Multi-Lingual Assistant</div>
+              <div className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">CPGRAMS</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Public Grievance Helper</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
               <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">SQLite</div>
@@ -275,7 +368,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Scheme Explorer Section */}
+      {/* SECTION 1: Scheme Explorer Section */}
       <section id="schemes" className="py-16 bg-slate-100/70 dark:bg-slate-900/40 border-y border-slate-200/80 dark:border-slate-800/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
@@ -393,7 +486,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Interactive Eligibility Checker Section */}
+      {/* SECTION 2: Interactive Eligibility Checker Section */}
       <section id="eligibility" className="py-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-12">
@@ -577,7 +670,190 @@ export default function Home() {
         </div>
       </section>
 
-      {/* User Tracked Applications Dashboard */}
+      {/* SECTION 3: Document Requirements Vault Section */}
+      <section id="doc-vault" className="py-20 bg-slate-100/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
+            <div>
+              <Badge className="mb-2 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                Civic Vault
+              </Badge>
+              <h2 className="text-3xl font-bold tracking-tight">Document Requirements Vault</h2>
+              <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
+                Quick reference guide for required documents for essential public services.
+              </p>
+            </div>
+
+            <div className="w-full md:w-72">
+              <Input
+                type="text"
+                placeholder="Search document guide..."
+                value={docVaultSearch}
+                onChange={(e) => setDocVaultSearch(e.target.value)}
+                className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredDocVault.map((item) => {
+              const IconComp = item.icon
+              return (
+                <Card key={item.id} className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-md">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                        <IconComp className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <Badge variant="outline" className="text-[10px] border-emerald-200 text-emerald-700">
+                          {item.category}
+                        </Badge>
+                      </div>
+                    </div>
+                    <CardTitle className="text-base font-bold leading-snug">{item.title}</CardTitle>
+                  </CardHeader>
+
+                  <CardContent className="space-y-3 text-xs">
+                    <div className="font-semibold text-slate-700 dark:text-slate-300">Required Checklist:</div>
+                    <ul className="space-y-1.5">
+                      {item.docs.map((d, idx) => (
+                        <li key={idx} className="flex items-start text-slate-600 dark:text-slate-400">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mr-2 flex-shrink-0 mt-0.5" />
+                          <span>{d}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+
+                  <CardFooter className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                    <a
+                      href={item.portal}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center"
+                    >
+                      Official Government Portal <ExternalLink className="w-3 h-3 ml-1" />
+                    </a>
+                  </CardFooter>
+                </Card>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 4: Public Grievance Helper Section (CPGRAMS) */}
+      <section id="grievance" className="py-20">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-semibold mb-3">
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-500" /> Citizen Rights Portal
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight">CPGRAMS Public Grievance Helper</h2>
+            <p className="text-slate-600 dark:text-slate-400 text-sm mt-2">
+              Facing administrative delay, non-issuance of benefits, or officer inaction? Generate a formal complaint draft for CPGRAMS & State Grievance Portals.
+            </p>
+          </div>
+
+          <Card className="border-slate-200 dark:border-slate-800 shadow-xl bg-white dark:bg-slate-900 rounded-3xl overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-rose-600 to-amber-600 text-white p-6 sm:p-8">
+              <CardTitle className="text-xl sm:text-2xl font-bold flex items-center">
+                <Scale className="w-6 h-6 mr-2" /> Public Grievance Draft Generator
+              </CardTitle>
+              <CardDescription className="text-rose-100 text-xs sm:text-sm">
+                Complies with Central Public Grievance Redress and Monitoring System (CPGRAMS) guidelines
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="p-6 sm:p-8 space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <Label className="text-xs font-semibold">Target Department / Ministry</Label>
+                  <select
+                    value={grievanceForm.department}
+                    onChange={(e) => setGrievanceForm({ ...grievanceForm, department: e.target.value })}
+                    className="mt-1.5 w-full rounded-md border border-slate-200 dark:border-slate-800 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                  >
+                    <option value="Food & Civil Supplies">Food & Civil Supplies (Ration Card)</option>
+                    <option value="Agriculture & Farmers Welfare">Agriculture & Farmers Welfare (PM-Kisan)</option>
+                    <option value="Health & Family Welfare">Health & Family Welfare (Ayushman Card)</option>
+                    <option value="Revenue & Land Records">Revenue & Land Records (Tehsildar / Income cert)</option>
+                    <option value="Municipal Administration">Municipal Administration (Civic / Tax)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-semibold">State / Union Territory</Label>
+                  <Input
+                    type="text"
+                    value={grievanceForm.state}
+                    onChange={(e) => setGrievanceForm({ ...grievanceForm, state: e.target.value })}
+                    className="mt-1.5"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Grievance Subject</Label>
+                <Input
+                  type="text"
+                  value={grievanceForm.subject}
+                  onChange={(e) => setGrievanceForm({ ...grievanceForm, subject: e.target.value })}
+                  className="mt-1.5"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">Description of Delay or Problem</Label>
+                <textarea
+                  rows={4}
+                  value={grievanceForm.description}
+                  onChange={(e) => setGrievanceForm({ ...grievanceForm, description: e.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-slate-200 dark:border-slate-800 bg-transparent p-3 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <Button
+                onClick={handleGenerateGrievanceDraft}
+                className="w-full bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-700 hover:to-amber-700 text-white font-bold py-6 rounded-2xl shadow-lg shadow-rose-500/20"
+              >
+                Generate Formal CPGRAMS Draft
+              </Button>
+
+              {generatedDraft && (
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Generated Official Letter Draft:</span>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(generatedDraft)}
+                      className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline"
+                    >
+                      Copy to Clipboard
+                    </button>
+                  </div>
+                  <pre className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-xs whitespace-pre-wrap leading-relaxed">
+                    {generatedDraft}
+                  </pre>
+                  <div className="flex items-center justify-between pt-2 text-xs">
+                    <span className="text-slate-500">Submit on official CPGRAMS portal:</span>
+                    <a
+                      href="https://pgportal.gov.in"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center"
+                    >
+                      Open pgportal.gov.in <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                    </a>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* SECTION 5: User Tracked Applications Dashboard */}
       {user && (
         <section id="my-schemes" className="py-16 bg-slate-100/70 dark:bg-slate-900/40 border-t border-slate-200/80 dark:border-slate-800/80">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -752,7 +1028,7 @@ export default function Home() {
             <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full"></span>
           </button>
         ) : (
-          <div className="w-[90vw] sm:w-[400px] h-[520px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className="w-[90vw] sm:w-[420px] h-[540px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
             {/* Chat Header */}
             <div className="p-4 bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 text-white flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -761,7 +1037,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm leading-none">JanSathi AI Assistant</h3>
-                  <span className="text-[10px] text-indigo-100">Instant Citizen Welfare Help</span>
+                  <span className="text-[10px] text-indigo-100">Multi-Lingual Civic Help</span>
                 </div>
               </div>
 
@@ -786,10 +1062,10 @@ export default function Home() {
                   className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[82%] p-3 rounded-2xl leading-relaxed ${
+                    className={`max-w-[85%] p-3 rounded-2xl leading-relaxed ${
                       msg.sender === 'user'
                         ? 'bg-indigo-600 text-white rounded-br-none'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200/60 dark:border-slate-700'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200/60 dark:border-slate-700 whitespace-pre-wrap'
                     }`}
                   >
                     {msg.text}
@@ -809,16 +1085,22 @@ export default function Home() {
             {/* Quick Prompts */}
             <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center space-x-2 overflow-x-auto text-[11px] scrollbar-none">
               <button
-                onClick={() => handleSendMessage("Am I eligible for PM-Kisan?")}
+                onClick={() => handleSendMessage("Ration card docs")}
                 className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 whitespace-nowrap text-slate-600 dark:text-slate-300 hover:border-indigo-500"
               >
-                PM-Kisan Eligibility
+                Ration Card Docs
               </button>
               <button
-                onClick={() => handleSendMessage("Ayushman Bharat card documents?")}
+                onClick={() => handleSendMessage("CPGRAMS complaint")}
                 className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 whitespace-nowrap text-slate-600 dark:text-slate-300 hover:border-indigo-500"
               >
-                Ayushman Card Docs
+                CPGRAMS Complaint
+              </button>
+              <button
+                onClick={() => handleSendMessage("PM-Kisan eligibility")}
+                className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 whitespace-nowrap text-slate-600 dark:text-slate-300 hover:border-indigo-500"
+              >
+                PM-Kisan
               </button>
             </div>
 
@@ -832,7 +1114,7 @@ export default function Home() {
             >
               <input
                 type="text"
-                placeholder="Ask about schemes, documents, or benefits..."
+                placeholder="Ask about schemes, Aadhaar, PAN, Ration, CPGRAMS..."
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 className="flex-1 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100"
@@ -852,13 +1134,15 @@ export default function Home() {
             <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
               <Landmark className="w-5 h-5" />
             </div>
-            <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">JanSathi Public Services Portal</span>
+            <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">JanSathi Public Services & Civic Portal</span>
           </div>
 
-          <div className="flex items-center space-x-6 text-slate-600 dark:text-slate-400">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-slate-600 dark:text-slate-400">
             <a href="#schemes" className="hover:underline">Schemes</a>
             <a href="#eligibility" className="hover:underline">Eligibility</a>
-            <a href="https://pmkisan.gov.in" target="_blank" rel="noreferrer" className="hover:underline">Official Portals</a>
+            <a href="#doc-vault" className="hover:underline">Doc Vault</a>
+            <a href="#grievance" className="hover:underline">CPGRAMS Helper</a>
+            <a href="https://pgportal.gov.in" target="_blank" rel="noreferrer" className="hover:underline">CPGRAMS Official</a>
           </div>
 
           <p>© 2026 JanSathi Portal. Powered by SQLite & tRPC Backend.</p>
