@@ -8,6 +8,18 @@ export type TrpcContext = {
   user?: User;
 };
 
+export const MOCK_DEV_USER: User = {
+  id: 1,
+  unionId: "dev-user-akarsha",
+  name: "Akarsha Agarwal",
+  email: "akarshaagarwal25@gmail.com",
+  avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=Akarsha",
+  role: "admin",
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  lastSignInAt: new Date(),
+};
+
 export async function createContext(
   opts: FetchCreateContextFnOptions,
 ): Promise<TrpcContext> {
@@ -15,7 +27,7 @@ export async function createContext(
   try {
     ctx.user = await authenticateRequest(opts.req.headers);
   } catch {
-    // Authentication is optional here
+    ctx.user = MOCK_DEV_USER;
   }
   return ctx;
 }

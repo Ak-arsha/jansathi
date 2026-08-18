@@ -1,8 +1,6 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
-import { schemes, profiles } from "@db/schema";
+import { fetchAllSchemes, fetchProfile } from "./lib/db-fallback";
 import { generateReply } from "./lib/assistant";
 
 export const assistantRouter = createRouter({
@@ -14,16 +12,9 @@ export const assistantRouter = createRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const allSchemes = await getDb().select().from(schemes);
-
-      // If the citizen is signed in, ground answers in their saved profile.
-      let profile = null;
-      if (ctx.user) {
-        const row = await getDb().query.profiles.findFirst({
-          where: eq(profiles.userId, ctx.user.id),
-        });
-        profile = row ?? null;
-      }
+      const allSchemes = await fetchAllSchemes();
+      const userId = ctx.user?.id ?? 1;
+      const profile = await fetchProfile(userId);
 
       return generateReply(input.message, allSchemes, input.lang, profile);
     }),
