@@ -44,13 +44,7 @@ export default function Register() {
   };
 
   const handleGoogleSignIn = () => {
-    // Simulates Google OAuth login flow
-    const sampleEmail = "user" + Math.floor(Math.random() * 1000) + "@gmail.com";
-    googleLoginMutation.mutate({
-      email: sampleEmail,
-      name: "Google User",
-      avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=" + sampleEmail,
-    });
+    window.location.href = "/api/auth/google";
   };
 
   return (
