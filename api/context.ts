@@ -5,6 +5,18 @@ import { Session } from "@contracts/constants";
 import { verifySessionToken } from "./kimi/session";
 import { sqliteDb } from "./lib/sqlite-db";
 
+export const MOCK_DEV_USER: User = {
+  id: 1,
+  unionId: "demo-user",
+  name: "JanSathi Citizen",
+  email: "citizen@jansathi.gov.in",
+  avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=jansathi",
+  role: "user",
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  lastSignInAt: new Date(),
+};
+
 export type TrpcContext = {
   req: Request;
   resHeaders: Headers;
