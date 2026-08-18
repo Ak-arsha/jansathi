@@ -21,8 +21,9 @@ export async function createContext(
     if (token) {
       const claim = await verifySessionToken(token);
       if (claim?.unionId) {
+        const idNum = Number.isInteger(Number(claim.unionId)) ? Number(claim.unionId) : -1;
         const stmt = sqliteDb.prepare("SELECT * FROM users WHERE username = ? OR email = ? OR id = ?");
-        const row = stmt.get(claim.unionId, claim.unionId, parseInt(claim.unionId) || -1) as any;
+        const row = stmt.get(claim.unionId, claim.unionId, idNum) as any;
         if (row) {
           ctx.user = {
             id: row.id,
@@ -39,7 +40,7 @@ export async function createContext(
       }
     }
   } catch (err) {
-    // Unauthenticated
+    console.error("[createContext] Error:", err);
   }
   return ctx;
 }

@@ -37,13 +37,13 @@ function formatProfile(row: any) {
 
 export const profileRouter = createRouter({
   get: publicQuery.query(async ({ ctx }) => {
-    const userId = ctx.user?.id ?? 1;
-    const row = sqliteDb.prepare("SELECT * FROM profiles WHERE user_id = ?").get(userId);
+    if (!ctx.user) return null;
+    const row = sqliteDb.prepare("SELECT * FROM profiles WHERE user_id = ?").get(ctx.user.id);
     return formatProfile(row);
   }),
 
-  save: publicQuery.input(profileShape).mutation(async ({ ctx, input }) => {
-    const userId = ctx.user?.id ?? 1;
+  save: authedQuery.input(profileShape).mutation(async ({ ctx, input }) => {
+    const userId = ctx.user.id;
     const stmt = sqliteDb.prepare(`
       INSERT INTO profiles (
         user_id, full_name, age, gender, state, occupation,

@@ -1,12 +1,13 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
+import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { sqliteDb } from "./lib/sqlite-db";
 
 const STATUS = ["saved", "documents_ready", "submitted", "approved"] as const;
 
 export const applicationsRouter = createRouter({
   list: publicQuery.query(async ({ ctx }) => {
-    const userId = ctx.user?.id ?? 1;
+    if (!ctx.user) return [];
+    const userId = ctx.user.id;
     const rows = sqliteDb.prepare(`
       SELECT 
         a.id as app_id, a.user_id, a.scheme_id, a.status, a.notes, a.created_at as app_created_at,
@@ -51,10 +52,10 @@ export const applicationsRouter = createRouter({
     }));
   }),
 
-  track: publicQuery
+  track: authedQuery
     .input(z.object({ schemeSlug: z.string(), notes: z.string().max(2000).optional() }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user?.id ?? 1;
+      const userId = ctx.user.id;
       const scheme = sqliteDb.prepare("SELECT id FROM schemes WHERE slug = ?").get(input.schemeSlug) as any;
       if (!scheme) throw new Error("Scheme not found");
 
@@ -68,10 +69,10 @@ export const applicationsRouter = createRouter({
       return { ok: true };
     }),
 
-  updateStatus: publicQuery
+  updateStatus: authedQuery
     .input(z.object({ id: z.number(), status: z.enum(STATUS) }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user?.id ?? 1;
+      const userId = ctx.user.id;
       sqliteDb.prepare(`
         UPDATE applications SET status = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND user_id = ?
@@ -80,10 +81,10 @@ export const applicationsRouter = createRouter({
       return { ok: true };
     }),
 
-  updateNotes: publicQuery
+  updateNotes: authedQuery
     .input(z.object({ id: z.number(), notes: z.string().max(2000) }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user?.id ?? 1;
+      const userId = ctx.user.id;
       sqliteDb.prepare(`
         UPDATE applications SET notes = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND user_id = ?
@@ -92,10 +93,10 @@ export const applicationsRouter = createRouter({
       return { ok: true };
     }),
 
-  remove: publicQuery
+  remove: authedQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.user?.id ?? 1;
+      const userId = ctx.user.id;
       sqliteDb.prepare("DELETE FROM applications WHERE id = ? AND user_id = ?").run(input.id, userId);
       return { ok: true };
     }),
