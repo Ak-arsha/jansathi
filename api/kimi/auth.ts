@@ -5,11 +5,23 @@ import * as cookie from "cookie";
 import { env } from "../lib/env";
 import { getSessionCookieOptions } from "../lib/cookies";
 import { Session } from "@contracts/constants";
-import { Errors } from "@contracts/errors";
 import { signSessionToken, verifySessionToken } from "./session";
 import { users as kimiUsers } from "./platform";
 import { findUserByUnionId, upsertUser } from "../queries/users";
 import type { TokenResponse } from "./types";
+import { MOCK_DEV_USER } from "../context";
+
+const DEFAULT_USER = MOCK_DEV_USER || {
+  id: 1,
+  unionId: "demo-user",
+  name: "JanSathi Citizen",
+  email: "citizen@jansathi.gov.in",
+  avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=jansathi",
+  role: "user",
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  lastSignInAt: new Date(),
+};
 
 async function exchangeAuthCode(
   code: string,
@@ -61,24 +73,21 @@ async function verifyAccessToken(
   return { userId, clientId };
 }
 
-import { MOCK_DEV_USER } from "../context";
-
 export async function authenticateRequest(headers: Headers) {
   const cookies = cookie.parse(headers.get("cookie") || "");
   const token = cookies[Session.cookieName];
   if (!token) {
-    return MOCK_DEV_USER;
+    return DEFAULT_USER;
   }
   try {
     const claim = await verifySessionToken(token);
-    if (!claim) return MOCK_DEV_USER;
+    if (!claim) return DEFAULT_USER;
     const user = await findUserByUnionId(claim.unionId);
-    return user || MOCK_DEV_USER;
+    return user || DEFAULT_USER;
   } catch {
-    return MOCK_DEV_USER;
+    return DEFAULT_USER;
   }
 }
-
 
 export function createOAuthCallbackHandler() {
   return async (c: Context) => {
