@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { 
-  Bot, FileText, Search, ArrowRight, CheckCircle2, Sparkles, 
-  Landmark, HeartPulse, GraduationCap, LogOut, ExternalLink, 
+  Bot, FileText, Search, Sparkles, 
+  Landmark, HeartPulse, LogOut, ExternalLink, 
   Check, Clock, X, ChevronRight, Calculator, Bookmark, CheckCircle, RefreshCw, Send, Globe,
-  ShieldAlert, CreditCard, UserCheck, Scale, AlertCircle, FileCheck, HelpCircle
+  ShieldAlert, CreditCard, UserCheck, Scale, FileCheck, Mic, MicOff, Volume2, VolumeX, Cpu
 } from "lucide-react"
 import { Link } from "react-router"
 import { useAuth } from "@/hooks/useAuth"
@@ -25,10 +25,16 @@ export default function Home() {
   const [selectedScheme, setSelectedScheme] = useState<any>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [chatLang, setChatLang] = useState<'en' | 'hi'>('en')
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string }>>([
-    { sender: 'bot', text: 'Namaste! I am JanSathi AI, your public services & civic assistant. Ask me about any government scheme, document requirements, or CPGRAMS public grievances!' }
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'bot'; text: string; executionChain?: any[] }>>([
+    { 
+      sender: 'bot', 
+      text: 'Namaste! I am JanSathi Agentic AI, powered by multi-agent reasoning, speech translation, and BeautifulSoup4 web scraping. How can I assist you today?' 
+    }
   ])
   const [inputMessage, setInputMessage] = useState('')
+  const [isListening, setIsListening] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [scraperNotice, setScraperNotice] = useState<string | null>(null)
 
   // Grievance Draft Form State
   const [grievanceForm, setGrievanceForm] = useState({
@@ -56,8 +62,8 @@ export default function Home() {
   const [matchedSchemesResult, setMatchedSchemesResult] = useState<any[] | null>(null)
   const [isMatching, setIsMatching] = useState(false)
 
-  // API Queries
-  const { data: schemesList = [], isLoading: isSchemesLoading } = trpc.schemes.list.useQuery({
+  // API Queries & Mutations
+  const { data: schemesList = [], isLoading: isSchemesLoading, refetch: refetchSchemes } = trpc.schemes.list.useQuery({
     search: searchQuery,
     category: selectedCategory === 'all' ? undefined : selectedCategory
   })
@@ -65,10 +71,20 @@ export default function Home() {
   const { data: categories = [] } = trpc.schemes.categories.useQuery()
   const { data: trackedApps = [], refetch: refetchApps } = trpc.applications.list.useQuery(undefined, { enabled: !!user })
 
-  // Mutations
+  const triggerScraperMutation = trpc.assistant.triggerScraper.useMutation({
+    onSuccess: (res: any) => {
+      setScraperNotice(`BeautifulSoup4 Web Scraper finished! Verified ${res.count || 0} schemes from india.gov.in portal.`)
+      refetchSchemes()
+    },
+    onError: (err) => {
+      setScraperNotice(`Web Scraper status: ${err.message}`)
+    }
+  })
+
   const chatMutation = trpc.assistant.chat.useMutation({
     onSuccess: (data) => {
-      setChatMessages((prev) => [...prev, { sender: 'bot', text: data.reply }])
+      setChatMessages((prev) => [...prev, { sender: 'bot', text: data.reply, executionChain: (data as any).executionChain }])
+      speakText(data.reply)
     },
     onError: () => {
       setChatMessages((prev) => [...prev, { sender: 'bot', text: "I'm having trouble connecting right now. Please try again." }])
@@ -96,6 +112,52 @@ export default function Home() {
       refetchApps()
     }
   })
+
+  // Speech Translation & Controls
+  const startSpeechToText = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert("Speech recognition is supported in Chrome, Edge, and Safari. Please type or switch browsers.")
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = chatLang === 'hi' ? 'hi-IN' : 'en-US'
+    recognition.interimResults = false
+
+    recognition.onstart = () => setIsListening(true)
+    recognition.onend = () => setIsListening(false)
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript
+      setInputMessage(transcript)
+      handleSendMessage(transcript)
+    }
+
+    recognition.start()
+  }
+
+  const speakText = (text: string) => {
+    if (!('speechSynthesis' in window)) return
+
+    window.speechSynthesis.cancel()
+    const cleanText = text.replace(/[*#`_]/g, '')
+    const utterance = new SpeechSynthesisUtterance(cleanText)
+    utterance.lang = chatLang === 'hi' ? 'hi-IN' : 'en-US'
+
+    utterance.onstart = () => setIsSpeaking(true)
+    utterance.onend = () => setIsSpeaking(false)
+    utterance.onerror = () => setIsSpeaking(false)
+
+    window.speechSynthesis.speak(utterance)
+  }
+
+  const stopSpeaking = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+      setIsSpeaking(false)
+    }
+  }
 
   // Document Vault Static Knowledge Base
   const docVaultData = [
@@ -163,7 +225,7 @@ export default function Home() {
     setChatMessages((prev) => [...prev, { sender: 'user', text: msg }])
     if (!textToSend) setInputMessage('')
 
-    chatMutation.mutate({ message: msg, lang: chatLang })
+    chatMutation.mutate({ message: msg, lang: chatLang, useAgenticAI: true })
   }
 
   const handleRunEligibilityCheck = () => {
@@ -201,7 +263,7 @@ As per Citizen Charter guidelines, this public service should be rendered within
 Yours faithfully,
 [Your Name / Citizen]
 Contact / Aadhaar Ref: [Your Ref Number]
-Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
+Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
 
     setGeneratedDraft(draft)
   }
@@ -238,7 +300,7 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
                   JanSathi
                 </span>
                 <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 text-[10px] font-semibold">
-                  AI Portal
+                  Agentic AI
                 </Badge>
               </div>
             </div>
@@ -257,8 +319,23 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
             )}
           </nav>
 
-          {/* User Status / Login */}
+          {/* Controls: Scraper Trigger & User Auth */}
           <div className="flex items-center space-x-3">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => triggerScraperMutation.mutate()}
+              disabled={triggerScraperMutation.isPending}
+              className="text-xs border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hidden sm:flex items-center"
+            >
+              {triggerScraperMutation.isPending ? (
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin text-indigo-600" />
+              ) : (
+                <Cpu className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+              )}
+              {triggerScraperMutation.isPending ? "BS4 Scraping..." : "BS4 Web Scraper"}
+            </Button>
+
             {user ? (
               <div className="flex items-center space-x-3">
                 <Avatar className="w-9 h-9 border border-indigo-200 dark:border-indigo-800 shadow-sm">
@@ -291,23 +368,34 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
         </div>
       </header>
 
+      {/* Scraper Notification Banner */}
+      {scraperNotice && (
+        <div className="bg-indigo-600 text-white text-xs font-semibold px-4 py-2 text-center flex items-center justify-center space-x-2">
+          <Sparkles className="w-4 h-4" />
+          <span>{scraperNotice}</span>
+          <button onClick={() => setScraperNotice(null)} className="ml-2 hover:underline">
+            <X className="w-3.5 h-3.5 inline" />
+          </button>
+        </div>
+      )}
+
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-16 pb-24 lg:pt-24 lg:pb-32">
         <div className="absolute inset-0 bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:16px_16px] opacity-10 pointer-events-none"></div>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold mb-8 shadow-sm">
-            <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" /> Next-Gen AI Citizen Services Portal
+            <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" /> Agentic AI + BeautifulSoup4 Web Scraper + Google Speech Translation
           </div>
           
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-none mb-6">
             Empowering Every Citizen with <br />
             <span className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 bg-clip-text text-transparent">
-              AI-Driven Public Services
+              Agentic AI Public Services
             </span>
           </h1>
 
           <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed font-normal">
-            Find eligible welfare schemes, check document requirements, draft CPGRAMS public grievances, and chat with AI in English & Hindi.
+            Find eligible welfare schemes, check document requirements, draft CPGRAMS public grievances, and speak with voice translation in English & Hindi.
           </p>
 
           {/* Search Box */}
@@ -349,16 +437,16 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
           {/* Live Platform Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto pt-8 border-t border-slate-200/80 dark:border-slate-800/80">
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
-              <div className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">100+</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Verified Central/State Schemes</div>
+              <div className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">Agentic AI</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Multi-Agent Task Dispatcher</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
-              <div className="text-3xl font-extrabold text-blue-600 dark:text-blue-400">Instant</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">AI Eligibility Match</div>
+              <div className="text-3xl font-extrabold text-blue-600 dark:text-blue-400">BS4 Scraper</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">BeautifulSoup4 Web Scraper</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
-              <div className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">CPGRAMS</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Public Grievance Helper</div>
+              <div className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">Google Speech</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Voice Speech Translation</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
               <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">SQLite</div>
@@ -1017,7 +1105,7 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
         </Dialog>
       )}
 
-      {/* Floating JanSathi AI Chatbot Widget */}
+      {/* Floating Agentic AI & Speech Chatbot Widget */}
       <div className="fixed bottom-6 right-6 z-50">
         {!isChatOpen ? (
           <button
@@ -1025,10 +1113,10 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
             className="w-14 h-14 rounded-full bg-gradient-to-tr from-indigo-600 to-blue-600 text-white shadow-2xl flex items-center justify-center hover:scale-105 transition-all duration-300 group border-2 border-white/20"
           >
             <Bot className="w-7 h-7 group-hover:rotate-12 transition-transform" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full"></span>
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full animate-ping"></span>
           </button>
         ) : (
-          <div className="w-[90vw] sm:w-[420px] h-[540px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className="w-[90vw] sm:w-[420px] h-[560px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
             {/* Chat Header */}
             <div className="p-4 bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 text-white flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -1036,8 +1124,10 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
                   <Bot className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm leading-none">JanSathi AI Assistant</h3>
-                  <span className="text-[10px] text-indigo-100">Multi-Lingual Civic Help</span>
+                  <h3 className="font-bold text-sm leading-none flex items-center">
+                    JanSathi Agentic AI <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-300" />
+                  </h3>
+                  <span className="text-[10px] text-indigo-100">Speech Translation & Multi-Agent Engine</span>
                 </div>
               </div>
 
@@ -1057,50 +1147,78 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
             {/* Messages Body */}
             <div className="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
               {chatMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[85%] p-3 rounded-2xl leading-relaxed ${
-                      msg.sender === 'user'
-                        ? 'bg-indigo-600 text-white rounded-br-none'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200/60 dark:border-slate-700 whitespace-pre-wrap'
-                    }`}
-                  >
-                    {msg.text}
+                <div key={idx} className="space-y-1.5">
+                  <div className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`max-w-[85%] p-3 rounded-2xl leading-relaxed ${
+                        msg.sender === 'user'
+                          ? 'bg-indigo-600 text-white rounded-br-none'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200/60 dark:border-slate-700 whitespace-pre-wrap'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
                   </div>
+
+                  {/* Agentic Step Chain Visualization */}
+                  {msg.executionChain && msg.executionChain.length > 0 && (
+                    <div className="ml-2 pl-3 border-l-2 border-indigo-400 space-y-1 my-1">
+                      {msg.executionChain.map((step: any, sIdx: number) => (
+                        <div key={sIdx} className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                          <span className="font-semibold text-indigo-600 dark:text-indigo-400">[{step.agentName}]</span> {step.action}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
               {chatMutation.isPending && (
                 <div className="flex justify-start">
                   <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-2xl rounded-bl-none text-slate-500 animate-pulse flex items-center space-x-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-                    <span>JanSathi AI is thinking...</span>
+                    <span>Agentic AI Reasoner processing task...</span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Quick Prompts */}
-            <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center space-x-2 overflow-x-auto text-[11px] scrollbar-none">
+            {/* Speech Translation Controls */}
+            <div className="px-3 py-2 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+              <div className="flex items-center space-x-2">
+                <Button
+                  size="sm"
+                  variant={isListening ? "destructive" : "outline"}
+                  onClick={startSpeechToText}
+                  className="h-7 text-[10px] px-2.5"
+                >
+                  {isListening ? (
+                    <>
+                      <MicOff className="w-3 h-3 mr-1 animate-pulse" /> Listening...
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-3 h-3 mr-1 text-indigo-600" /> Speech Input
+                    </>
+                  )}
+                </Button>
+
+                {isSpeaking && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={stopSpeaking}
+                    className="h-7 text-[10px] text-rose-500 hover:text-rose-600 px-2"
+                  >
+                    <VolumeX className="w-3 h-3 mr-1" /> Stop Voice
+                  </Button>
+                )}
+              </div>
+
               <button
-                onClick={() => handleSendMessage("Ration card docs")}
-                className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 whitespace-nowrap text-slate-600 dark:text-slate-300 hover:border-indigo-500"
+                onClick={() => handleSendMessage("Check my scheme eligibility")}
+                className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
               >
-                Ration Card Docs
-              </button>
-              <button
-                onClick={() => handleSendMessage("CPGRAMS complaint")}
-                className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 whitespace-nowrap text-slate-600 dark:text-slate-300 hover:border-indigo-500"
-              >
-                CPGRAMS Complaint
-              </button>
-              <button
-                onClick={() => handleSendMessage("PM-Kisan eligibility")}
-                className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 whitespace-nowrap text-slate-600 dark:text-slate-300 hover:border-indigo-500"
-              >
-                PM-Kisan
+                Auto Eligibility Match
               </button>
             </div>
 
@@ -1114,7 +1232,7 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
             >
               <input
                 type="text"
-                placeholder="Ask about schemes, Aadhaar, PAN, Ration, CPGRAMS..."
+                placeholder="Speak or type (e.g. PM Kisan, Ration Card docs...)"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 className="flex-1 bg-slate-100 dark:bg-slate-800 border-0 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100"
@@ -1134,7 +1252,7 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
             <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
               <Landmark className="w-5 h-5" />
             </div>
-            <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">JanSathi Public Services & Civic Portal</span>
+            <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">JanSathi Agentic AI Public Services & Civic Portal</span>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-6 text-slate-600 dark:text-slate-400">
@@ -1145,7 +1263,7 @@ Lodged via JanSathi Public Grievance Helper (CPGRAMS / State Portal)`
             <a href="https://pgportal.gov.in" target="_blank" rel="noreferrer" className="hover:underline">CPGRAMS Official</a>
           </div>
 
-          <p>© 2026 JanSathi Portal. Powered by SQLite & tRPC Backend.</p>
+          <p>© 2026 JanSathi Portal. Powered by BeautifulSoup4, Google Speech Translation & Agentic AI.</p>
         </div>
       </footer>
     </div>

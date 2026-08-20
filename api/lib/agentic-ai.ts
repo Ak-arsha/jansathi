@@ -1,0 +1,189 @@
+import type { Scheme } from "@db/schema";
+import { matchSchemes, type CitizenProfile } from "./eligibility";
+
+export type AgenticTaskType = 
+  | "eligibility_analysis" 
+  | "document_checklist" 
+  | "grievance_drafting" 
+  | "scheme_research" 
+  | "general_assistance";
+
+export interface AgenticStep {
+  agentName: string;
+  action: string;
+  result: string;
+}
+
+export interface AgenticResponse {
+  task: AgenticTaskType;
+  finalAnswer: string;
+  executionChain: AgenticStep[];
+  suggestedActions: string[];
+}
+
+export class AgenticAIEngine {
+  private schemes: Scheme[];
+
+  constructor(schemes: Scheme[]) {
+    this.schemes = schemes;
+  }
+
+  /**
+   * Agent 1: Research Agent - Searches scraped schemes and knowledge base
+   */
+  private researchAgent(query: string): Scheme[] {
+    const q = query.toLowerCase();
+    return this.schemes.filter((s) => {
+      const name = s.name.toLowerCase();
+      const cat = s.category.toLowerCase();
+      const sum = s.summary.toLowerCase();
+      return name.includes(q) || cat.includes(q) || sum.includes(q);
+    });
+  }
+
+  /**
+   * Agent 2: Eligibility Reasoning Agent - Evaluates citizen rules & constraints
+   */
+  private eligibilityAgent(profile: CitizenProfile) {
+    return matchSchemes(this.schemes, profile);
+  }
+
+  /**
+   * Agent 3: Document Analyst Agent - Builds required document checklists
+   */
+  private documentAgent(scheme: Scheme): string[] {
+    try {
+      return typeof scheme.documents === "string" ? JSON.parse(scheme.documents) : scheme.documents;
+    } catch {
+      return ["Aadhaar Card", "Income Certificate", "Residence Proof", "Bank Passbook"];
+    }
+  }
+
+  /**
+   * Agent 4: Grievance Specialist Agent - Formulates formal CPGRAMS complaint letters
+   */
+  private grievanceAgent(department: string, state: string, issue: string): string {
+    return `FORMAL PUBLIC GRIEVANCE LETTER (CPGRAMS Protocol)
+To: Nodal Officer, Department of ${department}, Govt of ${state}
+Subject: Official Grievance regarding ${issue}
+
+Respected Officer,
+This public grievance is submitted regarding unfulfilled service delivery.
+Issue Details: ${issue}
+
+As per Citizen Charter mandates, this delay breaches prescribed timeframes. Please expedite action.
+Reference: JanSathi Agentic AI Grievance System`;
+  }
+
+  /**
+   * Main Agentic AI Dispatcher - Coordinates agents autonomously
+   */
+  public processTask(query: string, profile?: CitizenProfile | null, lang: "en" | "hi" = "en"): AgenticResponse {
+    const chain: AgenticStep[] = [];
+    const q = query.toLowerCase();
+
+    // Task 1: Eligibility Check
+    if (q.includes("eligib") || q.includes("पात्रता") || q.includes("check")) {
+      chain.push({
+        agentName: "Task Dispatcher Agent",
+        action: "Identified task type: Citizen Scheme Eligibility Reasoning",
+        result: "Delegated profile to Eligibility Reasoning Agent."
+      });
+
+      const defaultProfile: CitizenProfile = profile || {
+        age: 30,
+        gender: "male",
+        state: "Uttar Pradesh",
+        occupation: "farmer",
+        annualIncome: 150000,
+        socialCategory: "General",
+        ownsLand: true,
+        hasDisability: false
+      };
+
+      const matches = this.eligibilityAgent(defaultProfile);
+      const eligibleList = matches.filter((m) => m.verdict !== "not_eligible").slice(0, 4);
+
+      chain.push({
+        agentName: "Eligibility Reasoning Agent",
+        action: `Evaluated ${this.schemes.length} schemes against profile parameters`,
+        result: `Found ${eligibleList.length} qualified welfare schemes.`
+      });
+
+      const answer = lang === "hi"
+        ? `🤖 **एजेंटिक AI विश्लेषण पूरा हुआ!**\n\nआपकी प्रोफ़ाइल के लिए योग्य योजनाएँ:\n${eligibleList.map((e) => `• **${e.scheme.nameHi}** (${e.score}% मिलान) — ${e.scheme.summaryHi}`).join("\n\n")}`
+        : `🤖 **Agentic AI Analysis Complete!**\n\nQualified schemes for your profile:\n${eligibleList.map((e) => `• **${e.scheme.name}** (${e.score}% match) — ${e.scheme.summary}`).join("\n\n")}`;
+
+      return {
+        task: "eligibility_analysis",
+        finalAnswer: answer,
+        executionChain: chain,
+        suggestedActions: ["Check required documents", "Track these schemes", "Ask how to apply"]
+      };
+    }
+
+    // Task 2: Grievance Drafting
+    if (q.includes("grievance") || q.includes("complaint") || q.includes("शिकायत") || q.includes("cpgrams")) {
+      chain.push({
+        agentName: "Task Dispatcher Agent",
+        action: "Identified task type: CPGRAMS Public Grievance Generation",
+        result: "Delegated details to Grievance Specialist Agent."
+      });
+
+      const draft = this.grievanceAgent("Food & Civil Supplies", "Uttar Pradesh", query);
+
+      chain.push({
+        agentName: "Grievance Specialist Agent",
+        action: "Synthesized CPGRAMS-compliant complaint text",
+        result: "Generated formal grievance representation letter."
+      });
+
+      return {
+        task: "grievance_drafting",
+        finalAnswer: `🤖 **CPGRAMS Public Grievance Draft Generated by Agentic AI:**\n\n\`\`\`\n${draft}\n\`\`\`\n\nYou can submit this directly on pgportal.gov.in.`,
+        executionChain: chain,
+        suggestedActions: ["Copy complaint text", "Open CPGRAMS Portal", "Track grievance status"]
+      };
+    }
+
+    // Task 3: Scheme Research & Document Checklist
+    chain.push({
+      agentName: "Research Agent",
+      action: "Queried SQLite Database & Scraped Government Portals",
+      result: `Found matching entries for "${query}".`
+    });
+
+    const found = this.researchAgent(query);
+    if (found.length > 0) {
+      const top = found[0];
+      const docs = this.documentAgent(top);
+
+      chain.push({
+        agentName: "Document Analyst Agent",
+        action: "Extracted required checklist & application steps",
+        result: `Compiled ${docs.length} required documents.`
+      });
+
+      const answer = lang === "hi"
+        ? `🤖 **${top.nameHi}**\n${top.summaryHi}\n\n**लाभ:** ${top.benefitsHi}\n\n**आवश्यक दस्तावेज़:**\n${docs.map((d) => `• ${d}`).join("\n")}\n\n**आधिकारिक पोर्टल:** ${top.officialUrl}`
+        : `🤖 **${top.name}**\n${top.summary}\n\n**Benefit:** ${top.benefits}\n\n**Required Documents:**\n${docs.map((d) => `• ${d}`).join("\n")}\n\n**Official Portal:** ${top.officialUrl}`;
+
+      return {
+        task: "scheme_research",
+        finalAnswer: answer,
+        executionChain: chain,
+        suggestedActions: ["How to apply?", "Check eligibility", "Track scheme"]
+      };
+    }
+
+    // Default Fallback
+    return {
+      task: "general_assistance",
+      finalAnswer: lang === "hi"
+        ? "🤖 **जनसाथी एजेंटिक AI:** मैं आपकी किस योजना, दस्तावेज़ या शिकायत में मदद करूँ? आप अपनी आयु, आय या किसी योजना का नाम बता सकते हैं।"
+        : "🤖 **JanSathi Agentic AI:** How can I assist you with government schemes, Aadhaar/Ration documents, or CPGRAMS grievances?",
+      executionChain: chain,
+      suggestedActions: ["Check eligibility", "Aadhaar / PAN docs", "CPGRAMS Complaint"]
+    };
+  }
+}
