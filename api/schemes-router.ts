@@ -15,6 +15,13 @@ const profileInput = z.object({
   hasDisability: z.boolean().nullish(),
 });
 
+function normalizeSearchText(value: unknown): string {
+  return String(value ?? "")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
 function formatSchemeRow(row: any): Scheme {
   return {
     id: row.id,
@@ -56,22 +63,31 @@ export const schemesRouter = createRouter({
       }
 
       if (input?.search) {
-        const q = input.search.toLowerCase();
+        const q = normalizeSearchText(input.search);
         results = results.filter((s) => {
           try {
-            const tags: string[] = typeof s.tags === "string" ? JSON.parse(s.tags) : s.tags;
-            return (
-              s.name.toLowerCase().includes(q) ||
-              s.nameHi.includes(q) ||
-              s.summary.toLowerCase().includes(q) ||
-              s.category.toLowerCase().includes(q) ||
-              tags.some((t) => t.toLowerCase().includes(q))
-            );
+            const tags: unknown[] = typeof s.tags === "string" ? JSON.parse(s.tags) : s.tags;
+            const searchableText = [
+              s.slug,
+              s.name,
+              s.nameHi,
+              s.ministry,
+              s.category,
+              s.summary,
+              s.summaryHi,
+              s.benefits,
+              s.benefitsHi,
+              ...(Array.isArray(tags) ? tags : []),
+            ]
+              .map(normalizeSearchText)
+              .join(" ");
+
+            return searchableText.includes(q);
           } catch {
-            return (
-              s.name.toLowerCase().includes(q) ||
-              s.summary.toLowerCase().includes(q)
-            );
+            return [s.slug, s.name, s.nameHi, s.ministry, s.category, s.summary, s.summaryHi]
+              .map(normalizeSearchText)
+              .join(" ")
+              .includes(q);
           }
         });
       }
@@ -94,7 +110,7 @@ export const schemesRouter = createRouter({
 
   match: publicQuery
     .input(z.object({ profile: profileInput }))
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       const rows = sqliteDb.prepare("SELECT * FROM schemes").all() as any[];
       const schemesList = rows.map(formatSchemeRow);
       return matchSchemes(schemesList, input.profile as CitizenProfile);

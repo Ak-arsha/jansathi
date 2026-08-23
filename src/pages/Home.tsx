@@ -9,8 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { 
   Bot, FileText, Search, Sparkles, 
   Landmark, HeartPulse, LogOut, ExternalLink, 
-  Check, Clock, X, ChevronRight, Calculator, Bookmark, CheckCircle, RefreshCw, Send, Globe,
-  ShieldAlert, CreditCard, UserCheck, Scale, FileCheck, Mic, MicOff, Volume2, VolumeX, Cpu
+  Check, Clock, X, ChevronRight, Calculator, Bookmark, CheckCircle, CheckCircle2, RefreshCw, Send, Globe,
+  ShieldAlert, CreditCard, UserCheck, Scale, FileCheck, Mic, MicOff, VolumeX
 } from "lucide-react"
 import { Link } from "react-router"
 import { useAuth } from "@/hooks/useAuth"
@@ -34,7 +34,8 @@ export default function Home() {
   const [inputMessage, setInputMessage] = useState('')
   const [isListening, setIsListening] = useState(false)
   const [isSpeaking, setIsSpeaking] = useState(false)
-  const [scraperNotice, setScraperNotice] = useState<string | null>(null)
+  const [chatError, setChatError] = useState<string | null>(null)
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null)
 
   // Grievance Draft Form State
   const [grievanceForm, setGrievanceForm] = useState({
@@ -69,34 +70,29 @@ export default function Home() {
   })
 
   const { data: categories = [] } = trpc.schemes.categories.useQuery()
+  const { data: schemeStats } = trpc.schemes.stats.useQuery()
   const { data: trackedApps = [], refetch: refetchApps } = trpc.applications.list.useQuery(undefined, { enabled: !!user })
-
-  const triggerScraperMutation = trpc.assistant.triggerScraper.useMutation({
-    onSuccess: (res: any) => {
-      setScraperNotice(`BeautifulSoup4 Web Scraper finished! Verified ${res.count || 0} schemes from india.gov.in portal.`)
-      refetchSchemes()
-    },
-    onError: (err) => {
-      setScraperNotice(`Web Scraper status: ${err.message}`)
-    }
-  })
 
   const chatMutation = trpc.assistant.chat.useMutation({
     onSuccess: (data) => {
+      setChatError(null)
       setChatMessages((prev) => [...prev, { sender: 'bot', text: data.reply, executionChain: (data as any).executionChain }])
       speakText(data.reply)
     },
-    onError: () => {
+    onError: (error) => {
+      setChatError(error.message)
       setChatMessages((prev) => [...prev, { sender: 'bot', text: "I'm having trouble connecting right now. Please try again." }])
     }
   })
 
   const matchMutation = trpc.schemes.match.useMutation({
     onSuccess: (data) => {
-      setMatchedSchemesResult(data)
+      setEligibilityError(null)
+      setMatchedSchemesResult(data.filter((result: any) => result.verdict !== 'not_eligible'))
       setIsMatching(false)
     },
-    onError: () => {
+    onError: (error) => {
+      setEligibilityError(error.message)
       setIsMatching(false)
     }
   })
@@ -115,6 +111,7 @@ export default function Home() {
 
   // Speech Translation & Controls
   const startSpeechToText = () => {
+    if (isListening) return
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
       alert("Speech recognition is supported in Chrome, Edge, and Safari. Please type or switch browsers.")
@@ -127,6 +124,10 @@ export default function Home() {
 
     recognition.onstart = () => setIsListening(true)
     recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => {
+      setIsListening(false)
+      setChatError('Voice input stopped. Please try again or type your message.')
+    }
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript
@@ -229,6 +230,8 @@ export default function Home() {
   }
 
   const handleRunEligibilityCheck = () => {
+    setEligibilityError(null)
+    setMatchedSchemesResult(null)
     setIsMatching(true)
     matchMutation.mutate({
       profile: {
@@ -299,8 +302,8 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
                 <span className="text-xl font-extrabold bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 bg-clip-text text-transparent">
                   JanSathi
                 </span>
-                <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 text-[10px] font-semibold">
-                  Agentic AI
+                  <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800 text-[10px] font-semibold">
+                    Public service guide
                 </Badge>
               </div>
             </div>
@@ -319,23 +322,8 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
             )}
           </nav>
 
-          {/* Controls: Scraper Trigger & User Auth */}
+          {/* Controls: User Auth */}
           <div className="flex items-center space-x-3">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => triggerScraperMutation.mutate()}
-              disabled={triggerScraperMutation.isPending}
-              className="text-xs border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hidden sm:flex items-center"
-            >
-              {triggerScraperMutation.isPending ? (
-                <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin text-indigo-600" />
-              ) : (
-                <Cpu className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
-              )}
-              {triggerScraperMutation.isPending ? "BS4 Scraping..." : "BS4 Web Scraper"}
-            </Button>
-
             {user ? (
               <div className="flex items-center space-x-3">
                 <Avatar className="w-9 h-9 border border-indigo-200 dark:border-indigo-800 shadow-sm">
@@ -368,34 +356,23 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
         </div>
       </header>
 
-      {/* Scraper Notification Banner */}
-      {scraperNotice && (
-        <div className="bg-indigo-600 text-white text-xs font-semibold px-4 py-2 text-center flex items-center justify-center space-x-2">
-          <Sparkles className="w-4 h-4" />
-          <span>{scraperNotice}</span>
-          <button onClick={() => setScraperNotice(null)} className="ml-2 hover:underline">
-            <X className="w-3.5 h-3.5 inline" />
-          </button>
-        </div>
-      )}
-
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-16 pb-24 lg:pt-24 lg:pb-32">
         <div className="absolute inset-0 bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:16px_16px] opacity-10 pointer-events-none"></div>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold mb-8 shadow-sm">
-            <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" /> Agentic AI + BeautifulSoup4 Web Scraper + Google Speech Translation
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-semibold mb-8 shadow-sm">
+            <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" /> Find a scheme. Know your documents. Take the next step.
           </div>
           
           <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-none mb-6">
-            Empowering Every Citizen with <br />
+            Find the support meant <br />
             <span className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-500 bg-clip-text text-transparent">
-              Agentic AI Public Services
+              for your life right now
             </span>
           </h1>
 
           <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed font-normal">
-            Find eligible welfare schemes, check document requirements, draft CPGRAMS public grievances, and speak with voice translation in English & Hindi.
+            JanSathi turns a long government search into a short, practical answer: a relevant scheme, an honest eligibility signal, the documents to prepare, and the official place to apply.
           </p>
 
           {/* Search Box */}
@@ -434,23 +411,28 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
             </div>
           </div>
 
-          {/* Live Platform Stats */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2 mb-8">
+            <a href="#eligibility" className="bg-indigo-600 text-white rounded-xl px-5 py-3 text-sm font-semibold hover:bg-indigo-700 transition">Check my eligibility <ChevronRight className="inline w-4 h-4 ml-1" /></a>
+            <a href="#schemes" className="bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 rounded-xl px-5 py-3 text-sm font-semibold border border-slate-200 dark:border-slate-700 hover:border-indigo-400 transition">Browse all schemes</a>
+          </div>
+
+          {/* Useful platform signals */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto pt-8 border-t border-slate-200/80 dark:border-slate-800/80">
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
-              <div className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">Agentic AI</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Multi-Agent Task Dispatcher</div>
+              <div className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">{schemeStats?.totalSchemes ?? '—'}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">curated schemes</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
-              <div className="text-3xl font-extrabold text-blue-600 dark:text-blue-400">BS4 Scraper</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">BeautifulSoup4 Web Scraper</div>
+              <div className="text-3xl font-extrabold text-blue-600 dark:text-blue-400">{schemeStats?.categories ?? '—'}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">areas of support</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
-              <div className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">Google Speech</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Voice Speech Translation</div>
+              <div className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400">2</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">languages supported</div>
             </div>
             <div className="p-4 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
-              <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">SQLite</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">Encrypted SQL Backend</div>
+              <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">100%</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">official links</div>
             </div>
           </div>
         </div>
@@ -715,7 +697,7 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold flex items-center text-emerald-600 dark:text-emerald-400">
                       <CheckCircle2 className="w-5 h-5 mr-2" />
-                      Eligible Schemes ({matchedSchemesResult.length})
+                      Potential Matches ({matchedSchemesResult.length})
                     </h3>
                   </div>
 
@@ -724,13 +706,15 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
                       <div key={res.scheme.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col justify-between">
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <Badge className="bg-emerald-500 text-white text-[10px] font-bold">
-                              Eligible
+                            <Badge className={`${res.verdict === 'eligible' ? 'bg-emerald-500' : 'bg-amber-500'} text-white text-[10px] font-bold`}>
+                              {res.verdict === 'eligible' ? 'Likely eligible' : 'Review eligibility'}
                             </Badge>
                             <span className="text-[10px] text-slate-400 uppercase font-semibold">{res.scheme.category}</span>
                           </div>
                           <h4 className="font-bold text-sm leading-snug">{res.scheme.name}</h4>
                           <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">{res.scheme.summary}</p>
+                          {res.reasons?.[0] && <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-2">{res.reasons[0]}</p>}
+                          {res.unknowns?.length > 0 && <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">Needs confirmation: {res.unknowns.join(', ')}</p>}
                         </div>
                         
                         <div className="mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
@@ -751,7 +735,15 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
                       </div>
                     ))}
                   </div>
+                  {matchedSchemesResult.length === 0 && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                      No schemes matched every detail you entered. Try checking your income, occupation, or land status, then run the check again. You can also browse all schemes for options with different rules.
+                    </div>
+                  )}
                 </div>
+              )}
+              {eligibilityError && (
+                <p className="text-sm text-rose-600 dark:text-rose-400" role="alert">{eligibilityError}</p>
               )}
             </CardContent>
           </Card>
@@ -766,9 +758,9 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
               <Badge className="mb-2 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                 Civic Vault
               </Badge>
-              <h2 className="text-3xl font-bold tracking-tight">Document Requirements Vault</h2>
+                <h2 className="text-3xl font-bold tracking-tight">Get Your Documents Ready</h2>
               <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
-                Quick reference guide for required documents for essential public services.
+                Use this checklist after finding a scheme or service. Every guide points to the official portal where you finish the application.
               </p>
             </div>
 
@@ -784,7 +776,11 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredDocVault.map((item) => {
+            {filteredDocVault.length === 0 ? (
+              <div className="md:col-span-2 lg:col-span-3 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                No document guide matches “{docVaultSearch}”. Try Aadhaar, PAN, ration card, or passport.
+              </div>
+            ) : filteredDocVault.map((item) => {
               const IconComp = item.icon
               return (
                 <Card key={item.id} className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-md">
@@ -1127,7 +1123,7 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
                   <h3 className="font-bold text-sm leading-none flex items-center">
                     JanSathi Agentic AI <Sparkles className="w-3.5 h-3.5 ml-1 text-amber-300" />
                   </h3>
-                  <span className="text-[10px] text-indigo-100">Speech Translation & Multi-Agent Engine</span>
+                  <span className="text-[10px] text-indigo-100">Scheme, document, and application guidance</span>
                 </div>
               </div>
 
@@ -1146,6 +1142,11 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
 
             {/* Messages Body */}
             <div className="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
+              {chatError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-2 text-rose-700" role="alert">
+                  {chatError}
+                </div>
+              )}
               {chatMessages.map((msg, idx) => (
                 <div key={idx} className="space-y-1.5">
                   <div className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -1176,7 +1177,7 @@ Lodged via JanSathi Agentic AI Public Grievance Helper (CPGRAMS / State Portal)`
                 <div className="flex justify-start">
                   <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-2xl rounded-bl-none text-slate-500 animate-pulse flex items-center space-x-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-                    <span>Agentic AI Reasoner processing task...</span>
+                    <span>Checking the scheme guide...</span>
                   </div>
                 </div>
               )}

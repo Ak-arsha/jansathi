@@ -1,6 +1,6 @@
 import { SEED_SCHEMES } from "@db/schemes-data";
 import { getDb } from "../queries/connection";
-import { schemes, profiles, applications, type Scheme, type Profile, type Application } from "@db/schema";
+import { schemes, profiles, type Scheme, type Profile } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 const fallbackSchemes: Scheme[] = SEED_SCHEMES.map((s, idx) => ({
@@ -23,8 +23,7 @@ const fallbackSchemes: Scheme[] = SEED_SCHEMES.map((s, idx) => ({
   createdAt: new Date(),
 }));
 
-let inMemoryProfiles: Record<number, Profile> = {};
-let inMemoryApplications: Application[] = [];
+const inMemoryProfiles: Record<number, Profile> = {};
 
 export async function fetchAllSchemes(): Promise<Scheme[]> {
   try {

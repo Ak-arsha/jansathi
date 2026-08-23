@@ -81,9 +81,9 @@ try {
   const countStmt = sqliteDb.prepare("SELECT COUNT(*) as count FROM schemes");
   const { count } = countStmt.get() as { count: number };
 
-  if (count === 0) {
+  {
     const insertScheme = sqliteDb.prepare(`
-      INSERT INTO schemes (
+      INSERT OR IGNORE INTO schemes (
         slug, name, name_hi, ministry, category, level, summary, summary_hi,
         benefits, benefits_hi, rules, documents, steps, official_url, tags
       ) VALUES (
@@ -144,7 +144,7 @@ try {
     prepare: (query: string) => {
       const q = query.toLowerCase();
       return {
-        all: (...params: any[]) => {
+        all: (..._params: any[]) => {
           if (q.includes("from schemes")) return mockSchemes;
           if (q.includes("distinct category")) return Array.from(new Set(mockSchemes.map(s => s.category))).map(c => ({ category: c }));
           return [];
@@ -156,7 +156,7 @@ try {
           if (q.includes("count(*)")) return { count: mockSchemes.length };
           return null;
         },
-        run: (...params: any[]) => ({ lastInsertRowid: 1, changes: 1 })
+        run: (..._params: any[]) => ({ lastInsertRowid: 1, changes: 1 })
       };
     },
     exec: () => {},

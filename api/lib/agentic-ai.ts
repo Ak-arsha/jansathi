@@ -1,5 +1,6 @@
 import type { Scheme } from "@db/schema";
 import { matchSchemes, type CitizenProfile } from "./eligibility";
+import { generateReply } from "./assistant";
 
 export type AgenticTaskType = 
   | "eligibility_analysis" 
@@ -32,12 +33,14 @@ export class AgenticAIEngine {
    * Agent 1: Research Agent - Searches scraped schemes and knowledge base
    */
   private researchAgent(query: string): Scheme[] {
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
     return this.schemes.filter((s) => {
-      const name = s.name.toLowerCase();
-      const cat = s.category.toLowerCase();
-      const sum = s.summary.toLowerCase();
-      return name.includes(q) || cat.includes(q) || sum.includes(q);
+      const tags: string[] = typeof s.tags === "string" ? JSON.parse(s.tags) : s.tags;
+      const searchableText = [s.slug, s.name, s.nameHi, s.category, s.summary, s.benefits, ...(tags || [])]
+        .join(" ")
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, " ");
+      return searchableText.includes(q) || q.split(/\s+/).filter((word) => word.length > 3).some((word) => searchableText.includes(word));
     });
   }
 
@@ -83,7 +86,7 @@ Reference: JanSathi Agentic AI Grievance System`;
     const q = query.toLowerCase();
 
     // Task 1: Eligibility Check
-    if (q.includes("eligib") || q.includes("पात्रता") || q.includes("check")) {
+    if (q.includes("eligib") || q.includes("पात्रता") || q.includes("पात्र") || q.includes("qualif")) {
       chain.push({
         agentName: "Task Dispatcher Agent",
         action: "Identified task type: Citizen Scheme Eligibility Reasoning",
@@ -176,14 +179,18 @@ Reference: JanSathi Agentic AI Grievance System`;
       };
     }
 
-    // Default Fallback
+    const assistantReply = generateReply(query, this.schemes, lang, profile);
+    chain.push({
+      agentName: "Civic Assistant Agent",
+      action: "Resolved the request using document, scheme, and service intent matching",
+      result: "Prepared a targeted response from the civic knowledge base."
+    });
+
     return {
-      task: "general_assistance",
-      finalAnswer: lang === "hi"
-        ? "🤖 **जनसाथी एजेंटिक AI:** मैं आपकी किस योजना, दस्तावेज़ या शिकायत में मदद करूँ? आप अपनी आयु, आय या किसी योजना का नाम बता सकते हैं।"
-        : "🤖 **JanSathi Agentic AI:** How can I assist you with government schemes, Aadhaar/Ration documents, or CPGRAMS grievances?",
+      task: assistantReply.action === "check_eligibility" ? "eligibility_analysis" : "general_assistance",
+      finalAnswer: assistantReply.reply,
       executionChain: chain,
-      suggestedActions: ["Check eligibility", "Aadhaar / PAN docs", "CPGRAMS Complaint"]
+      suggestedActions: assistantReply.suggestions
     };
   }
 }

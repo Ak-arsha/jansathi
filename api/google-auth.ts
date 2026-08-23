@@ -1,6 +1,5 @@
 import type { Context } from "hono";
 import { setCookie } from "hono/cookie";
-import * as cookie from "cookie";
 import { Session } from "@contracts/constants";
 import { signSessionToken } from "./kimi/session";
 import { getSessionCookieOptions } from "./lib/cookies";
@@ -8,6 +7,9 @@ import { sqliteDb } from "./lib/sqlite-db";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+
+type GoogleTokenResponse = { access_token: string };
+type GoogleUserInfo = { email: string; name?: string; picture?: string };
 
 export function handleGoogleAuthRedirect() {
   return async (c: Context) => {
@@ -109,13 +111,13 @@ export function handleGoogleAuthCallback() {
         });
 
         if (tokenResp.ok) {
-          const tokens = await tokenResp.json();
+          const tokens = (await tokenResp.json()) as GoogleTokenResponse;
           const userResp = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
             headers: { Authorization: `Bearer ${tokens.access_token}` },
           });
 
           if (userResp.ok) {
-            const userInfo = await userResp.json();
+            const userInfo = (await userResp.json()) as GoogleUserInfo;
             email = userInfo.email;
             name = userInfo.name || name;
             avatar = userInfo.picture || "";
