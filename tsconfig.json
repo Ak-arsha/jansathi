@@ -14,5 +14,5 @@
     },
     "jsx": "react-jsx"
   },
-  "include": ["src", "api", "contracts", "db"]
+  "include": ["src", "api", "server", "contracts", "db"]
 }
