@@ -5,8 +5,19 @@ import fs from "fs";
 let sqliteDb: any;
 
 try {
-  const Database = (await import("better-sqlite3")).default;
-  const dataDir = path.resolve(process.cwd(), "data");
+  let Database: any;
+  try {
+    const bsql = require("better-sqlite3");
+    Database = bsql.default || bsql;
+  } catch {
+    // better-sqlite3 not available or native binding missing
+  }
+
+  if (!Database) {
+    throw new Error("better-sqlite3 module not available in this environment");
+  }
+
+  const dataDir = process.env.VERCEL ? "/tmp/data" : path.resolve(process.cwd(), "data");
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
